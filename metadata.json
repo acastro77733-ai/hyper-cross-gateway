@@ -1,0 +1,5 @@
+{
+  "name": "HC Gateway",
+  "description": "A clean, mobile-responsive B2C Web3 application for non-technical users to perform escrow trades using email login.",
+  "requestFramePermissions": []
+}

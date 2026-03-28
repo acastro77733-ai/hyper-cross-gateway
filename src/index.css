@@ -1,0 +1,208 @@
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-pixel: "VT323", monospace;
+  --color-royal: #002366;
+  --color-gold: #FFD700;
+  --color-umbrella-red: #CC0000;
+  --color-dark-royal: #001133;
+}
+
+:root {
+  --glass-bg: rgba(0, 35, 102, 0.4);
+  --glass-border: rgba(255, 215, 0, 0.3);
+  --glass-highlight: rgba(255, 255, 255, 0.1);
+}
+
+body {
+  font-family: var(--font-pixel);
+  background-color: var(--color-dark-royal);
+  color: var(--color-gold);
+  /* Circuitry pattern with radial glow */
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(0, 35, 102, 0.6) 0%, transparent 100%),
+    linear-gradient(rgba(255, 215, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 215, 0, 0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  border-radius: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05),
+    transparent
+  );
+  transition: 0.5s;
+}
+
+.glass-card:hover::before {
+  left: 100%;
+}
+
+.glass-btn {
+  background: rgba(204, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  color: var(--color-gold);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-btn:hover:not(:disabled) {
+  background: rgba(204, 0, 0, 0.3);
+  border-color: var(--color-gold);
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
+}
+
+.glass-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.glass-btn-secondary {
+  background: rgba(0, 35, 102, 0.3);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  color: var(--color-gold);
+  transition: all 0.3s ease;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.glass-btn-secondary:hover:not(:disabled) {
+  background: rgba(0, 35, 102, 0.5);
+  border-color: rgba(255, 215, 0, 0.5);
+}
+
+.glass-input {
+  background: rgba(0, 17, 51, 0.4);
+  border: 1px solid var(--glass-border);
+  color: var(--color-gold);
+  border-radius: 12px;
+  backdrop-filter: blur(5px);
+  transition: all 0.3s ease;
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--color-gold);
+  background: rgba(0, 17, 51, 0.6);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.15);
+}
+
+/* 4D Geometric Cross - Glass Refinement */
+.tesseract-container {
+  perspective: 1200px;
+  width: 140px;
+  height: 140px;
+  margin: 0 auto;
+}
+
+.tesseract {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  animation: spin4D 12s infinite linear;
+}
+
+.tesseract-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(255, 215, 0, 0.5);
+  background: rgba(204, 0, 0, 0.1);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 30px rgba(255, 215, 0, 0.1);
+}
+
+.tesseract-face::after, .tesseract-face::before {
+  content: '';
+  position: absolute;
+  background: rgba(255, 215, 0, 0.15);
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.1);
+}
+
+.tesseract-face::after {
+  width: 2px;
+  height: 100%;
+}
+
+.tesseract-face::before {
+  width: 100%;
+  height: 2px;
+}
+
+.front  { transform: translateZ(70px); }
+.back   { transform: rotateY(180deg) translateZ(70px); }
+.right  { transform: rotateY(90deg) translateZ(70px); }
+.left   { transform: rotateY(-90deg) translateZ(70px); }
+.top    { transform: rotateX(90deg) translateZ(70px); }
+.bottom { transform: rotateX(-90deg) translateZ(70px); }
+
+.inner-tesseract {
+  width: 40%;
+  height: 40%;
+  position: absolute;
+  top: 30%;
+  left: 30%;
+  transform-style: preserve-3d;
+  animation: spin4DReverse 10s infinite linear;
+}
+
+.inner-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--color-gold);
+  background: rgba(0, 35, 102, 0.4);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
+}
+
+.inner-front  { transform: translateZ(28px); }
+.inner-back   { transform: rotateY(180deg) translateZ(28px); }
+.inner-right  { transform: rotateY(90deg) translateZ(28px); }
+.inner-left   { transform: rotateY(-90deg) translateZ(28px); }
+.inner-top    { transform: rotateX(90deg) translateZ(28px); }
+.inner-bottom { transform: rotateX(-90deg) translateZ(28px); }
+
+@keyframes spin4D {
+  0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+  100% { transform: rotateX(360deg) rotateY(720deg) rotateZ(360deg); }
+}
+
+@keyframes spin4DReverse {
+  0% { transform: rotateX(360deg) rotateY(360deg) rotateZ(0deg); }
+  100% { transform: rotateX(0deg) rotateY(0deg) rotateZ(360deg); }
+}
