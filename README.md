@@ -16,5 +16,8 @@ View your app in AI Studio: https://ai.studio/apps/7d1eb158-e8c9-433c-9506-34f1d
 1. Install dependencies:
    `npm install`
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+3. Configure Kaleido securely:
+   `KALEIDO_RPC_URL` for backend telemetry and any optional server-side auth env vars your Kaleido endpoint requires
+4. Optionally set `VITE_KALEIDO_PUBLIC_RPC_URL` only if you want wallets to be able to auto-add the Kaleido chain from the browser
+5. Run the app:
    `npm run dev`

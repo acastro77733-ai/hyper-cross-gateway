@@ -4,7 +4,7 @@
  */
 
 /// <reference types="vite/client" />
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { Mail, CheckCircle2, Clock, ShieldCheck, Wallet, ArrowUpRight, ArrowDownLeft, Settings, Activity, Globe, Zap, Server } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -13,19 +13,31 @@ import { createWeb3Modal, defaultConfig, useWeb3Modal, useWeb3ModalAccount, useW
 
 // --- Web3Modal Configuration ---
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || '5bfa9c8d646441ac48e1e416de0b7773';
-const KALEIDO_RPC_URL = import.meta.env.VITE_KALEIDO_RPC_URL;
+const PUBLIC_KALEIDO_RPC_URL = import.meta.env.VITE_KALEIDO_PUBLIC_RPC_URL || '';
 const KALEIDO_CHAIN_ID = Number(import.meta.env.VITE_KALEIDO_CHAIN_ID || '13370');
 const KALEIDO_CHAIN_NAME = import.meta.env.VITE_KALEIDO_CHAIN_NAME || 'Kaleido EVM';
 const KALEIDO_CURRENCY_SYMBOL = import.meta.env.VITE_KALEIDO_CURRENCY_SYMBOL || 'ETH';
 const KALEIDO_EXPLORER_URL = import.meta.env.VITE_KALEIDO_EXPLORER_URL || '';
+const hasPublicKaleidoRpc = Boolean(PUBLIC_KALEIDO_RPC_URL);
 
-const kaleidoChain = {
+const kaleidoTargetChain = {
   chainId: KALEIDO_CHAIN_ID,
   name: KALEIDO_CHAIN_NAME,
   currency: KALEIDO_CURRENCY_SYMBOL,
   explorerUrl: import.meta.env.VITE_KALEIDO_EXPLORER_URL || 'https://www.kaleido.io/',
-  rpcUrl: KALEIDO_RPC_URL || 'https://cloudflare-eth.com'
+  rpcUrl: PUBLIC_KALEIDO_RPC_URL
 };
+
+const fallbackMainnetChain = {
+  chainId: 1,
+  name: 'Ethereum Mainnet',
+  currency: 'ETH',
+  explorerUrl: 'https://etherscan.io',
+  rpcUrl: 'https://cloudflare-eth.com'
+};
+
+const walletModalChain = hasPublicKaleidoRpc ? kaleidoTargetChain : fallbackMainnetChain;
+const TARGET_CHAIN_ID = kaleidoTargetChain.chainId;
 
 const metadata = {
   name: 'HC Gateway',
@@ -36,7 +48,7 @@ const metadata = {
 
 createWeb3Modal({
   ethersConfig: defaultConfig({ metadata }),
-  chains: [kaleidoChain],
+  chains: [walletModalChain],
   projectId,
   enableAnalytics: true
 });
@@ -100,13 +112,17 @@ export default function App() {
   const [secureAccount, setSecureAccount] = useState('');
   const [walletType, setWalletType] = useState<string>('');
 
-  const [kaleidoChainId, setKaleidoChainId] = useState('N/A');
-  const [kaleidoNetworkName, setKaleidoNetworkName] = useState('Unknown');
+  const [kaleidoChainId, setKaleidoChainId] = useState(TARGET_CHAIN_ID.toString());
+  const [kaleidoNetworkName, setKaleidoNetworkName] = useState(kaleidoTargetChain.name);
   const [latestBlock, setLatestBlock] = useState('N/A');
   const [gasPriceGwei, setGasPriceGwei] = useState('N/A');
   const [kaleidoHealth, setKaleidoHealth] = useState<'healthy' | 'error'>('error');
+  const [kaleidoError, setKaleidoError] = useState('');
   const [activeWalletChainId, setActiveWalletChainId] = useState('N/A');
   const [isWrongNetwork, setIsWrongNetwork] = useState(false);
+  const [walletConnectError, setWalletConnectError] = useState('');
+  const [isSwitchingChain, setIsSwitchingChain] = useState(false);
+  const [switchChainError, setSwitchChainError] = useState('');
 
   const [showTradeModal, setShowTradeModal] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
@@ -124,16 +140,6 @@ export default function App() {
   const { open } = useWeb3Modal();
   const { address, isConnected } = useWeb3ModalAccount();
   const { walletProvider } = useWeb3ModalProvider();
-
-  const kaleidoProvider = useMemo(() => {
-    if (!KALEIDO_RPC_URL) return null;
-    try {
-      return new ethers.JsonRpcProvider(KALEIDO_RPC_URL);
-    } catch (error) {
-      console.error('Failed to initialize Kaleido provider:', error);
-      return null;
-    }
-  }, []);
 
   const detectWalletType = (provider: any) => {
     const raw = provider?.provider || provider;
@@ -175,26 +181,28 @@ export default function App() {
 
   const refreshRuntimeState = async () => {
     try {
-      if (kaleidoProvider) {
-        const [network, blockNumber, feeData] = await Promise.all([
-          kaleidoProvider.getNetwork(),
-          kaleidoProvider.getBlockNumber(),
-          kaleidoProvider.getFeeData()
-        ]);
-
-        setKaleidoHealth('healthy');
-        setKaleidoChainId(network.chainId.toString());
-        setKaleidoNetworkName(network.name || 'Kaleido EVM');
-        setLatestBlock(blockNumber.toString());
-        if (feeData.gasPrice) {
-          setGasPriceGwei(Number(ethers.formatUnits(feeData.gasPrice, 'gwei')).toFixed(2));
-        }
-      } else {
-        setKaleidoHealth('error');
+      const response = await fetch('/api/kaleido/telemetry');
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || `Telemetry request failed (${response.status})`);
       }
+
+      const data = await response.json();
+      setKaleidoHealth('healthy');
+      setKaleidoChainId(String(data.chainId || TARGET_CHAIN_ID));
+      setKaleidoNetworkName(String(data.networkName || kaleidoTargetChain.name));
+      setLatestBlock(String(data.latestBlock ?? 'N/A'));
+      setGasPriceGwei(data.gasPriceGwei ? Number(data.gasPriceGwei).toFixed(2) : 'N/A');
+      setKaleidoError('');
     } catch (error) {
       console.error('Kaleido telemetry fetch failed:', error);
       setKaleidoHealth('error');
+      setKaleidoChainId(TARGET_CHAIN_ID.toString());
+      setKaleidoNetworkName(kaleidoTargetChain.name);
+      setLatestBlock('N/A');
+      setGasPriceGwei('N/A');
+      const message = error instanceof Error ? error.message : 'Unable to load Kaleido telemetry.';
+      setKaleidoError(message);
     }
 
     try {
@@ -211,7 +219,7 @@ export default function App() {
       setSecureAccount(shortAddress(currentAddress));
       setBalance(Number(ethers.formatEther(currentBalance)).toFixed(4));
       setActiveWalletChainId(activeNetwork.chainId.toString());
-      setIsWrongNetwork(Number(activeNetwork.chainId) !== KALEIDO_CHAIN_ID);
+      setIsWrongNetwork(Number(activeNetwork.chainId) !== TARGET_CHAIN_ID);
     } catch (error) {
       console.error('Wallet refresh failed:', error);
     }
@@ -227,11 +235,99 @@ export default function App() {
   useEffect(() => {
     if (isConnected && address) {
       setIsLoggedIn(true);
+      setWalletConnectError('');
+      setSwitchChainError('');
       setSecureAccount(shortAddress(address));
       const detected = detectWalletType(walletProvider);
       setWalletType(detected);
     }
   }, [isConnected, address, walletProvider]);
+
+  const handleWalletConnect = async () => {
+    setWalletConnectError('');
+    try {
+      await open();
+    } catch (error: any) {
+      const message = error?.message || 'Failed to open wallet connection modal.';
+      setWalletConnectError(message);
+    }
+  };
+
+  const handleSwitchToTargetChain = async () => {
+    setSwitchChainError('');
+
+    if (!walletProvider) {
+      setSwitchChainError('No wallet provider available. Connect a wallet first.');
+      return;
+    }
+
+    const rawProvider: any = (walletProvider as any)?.provider || walletProvider;
+    if (!rawProvider?.request) {
+      setSwitchChainError('Connected wallet does not support programmatic network switching.');
+      return;
+    }
+
+    const chainIdHex = `0x${TARGET_CHAIN_ID.toString(16)}`;
+
+    setIsSwitchingChain(true);
+    try {
+      await rawProvider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: chainIdHex }]
+      });
+      await refreshRuntimeState();
+      return;
+    } catch (switchError: any) {
+      const switchCode = switchError?.code;
+      if (switchCode === 4902) {
+        if (!hasPublicKaleidoRpc) {
+          setSwitchChainError('No public Kaleido RPC is configured for wallet_addEthereumChain. Configure VITE_KALEIDO_PUBLIC_RPC_URL or add the network manually in your wallet.');
+          return;
+        }
+
+        try {
+          await rawProvider.request({
+            method: 'wallet_addEthereumChain',
+            params: [
+              {
+                chainId: chainIdHex,
+                chainName: kaleidoTargetChain.name,
+                nativeCurrency: {
+                  name: kaleidoTargetChain.currency,
+                  symbol: kaleidoTargetChain.currency,
+                  decimals: 18
+                },
+                rpcUrls: [kaleidoTargetChain.rpcUrl],
+                blockExplorerUrls: kaleidoTargetChain.explorerUrl ? [kaleidoTargetChain.explorerUrl] : []
+              }
+            ]
+          });
+
+          await rawProvider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: chainIdHex }]
+          });
+          await refreshRuntimeState();
+          return;
+        } catch (addError: any) {
+          const addMessage = addError?.message || 'Unable to add target chain to wallet.';
+          setSwitchChainError(addMessage);
+          return;
+        }
+      }
+
+      if (switchCode === 4001) {
+        setSwitchChainError('Network switch request was rejected in wallet.');
+        return;
+      }
+
+      const switchMessage = switchError?.message || 'Unable to switch wallet network.';
+      setSwitchChainError(switchMessage);
+      return;
+    } finally {
+      setIsSwitchingChain(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -293,6 +389,7 @@ export default function App() {
       });
       const data = await response.json();
       if (response.ok) {
+        setSwitchChainError('');
         setSetupStatus({ success: true, message: 'IDENTITY PROVIDER REGISTERED SUCCESSFULLY' });
       } else {
         setSetupStatus({ success: false, message: `SETUP FAILED: ${data.error || JSON.stringify(data)}` });
@@ -340,8 +437,8 @@ export default function App() {
     try {
       const signer = await active.provider.getSigner();
       const network = await active.provider.getNetwork();
-      if (Number(network.chainId) !== KALEIDO_CHAIN_ID) {
-        setTradeError(`Wrong network. Active wallet chain ${network.chainId.toString()} does not match Kaleido chain ${KALEIDO_CHAIN_ID}.`);
+      if (Number(network.chainId) !== TARGET_CHAIN_ID) {
+        setTradeError(`Wrong network. Active wallet chain ${network.chainId.toString()} does not match target chain ${TARGET_CHAIN_ID}.`);
         setIsWrongNetwork(true);
         return;
       }
@@ -416,12 +513,15 @@ export default function App() {
 
           <div className="space-y-4">
             <button
-              onClick={() => open()}
+              onClick={handleWalletConnect}
               className="w-full flex justify-center items-center py-4 px-4 glass-btn text-2xl"
             >
               <Globe className="mr-3 h-6 w-6" />
               CONNECT WALLET
             </button>
+            {walletConnectError && (
+              <p className="text-sm text-umbrella-red font-bold uppercase">{walletConnectError}</p>
+            )}
 
             <div className="relative flex items-center py-2">
               <div className="flex-grow border-t border-gold/20"></div>
@@ -526,7 +626,7 @@ export default function App() {
           <div className="flex items-center space-x-4">
             {!isConnected ? (
               <button
-                onClick={() => open()}
+                onClick={handleWalletConnect}
                 className="text-lg font-medium text-gold bg-royal/40 backdrop-blur-md border border-gold/30 hover:border-gold hover:text-umbrella-red transition-all px-4 py-2 rounded-full uppercase"
               >
                 <Globe className="w-5 h-5 inline mr-2" />
@@ -569,13 +669,25 @@ export default function App() {
                   Wallet Chain: {activeWalletChainId}
                 </span>
                 <span className={`rounded-full border px-3 py-1 ${isWrongNetwork ? 'border-umbrella-red/40 bg-umbrella-red/20 text-umbrella-red' : 'border-green-400/30 bg-green-500/10 text-green-300'}`}>
-                  {isWrongNetwork ? 'Wrong Network' : 'Kaleido Matched'}
+                  {isWrongNetwork ? 'Wrong Network' : 'Target Chain Matched'}
                 </span>
               </div>
               {isWrongNetwork && (
-                <p className="mt-4 max-w-2xl text-sm font-bold uppercase text-umbrella-red">
-                  Trading is locked until the connected wallet switches to Kaleido chain {KALEIDO_CHAIN_ID}.
-                </p>
+                <div className="mt-4 max-w-2xl space-y-3">
+                  <p className="text-sm font-bold uppercase text-umbrella-red">
+                    Trading is locked until the connected wallet switches to target chain {TARGET_CHAIN_ID}.
+                  </p>
+                  <button
+                    onClick={handleSwitchToTargetChain}
+                    disabled={isSwitchingChain || !isConnected}
+                    className="glass-btn-secondary px-4 py-2 text-sm disabled:opacity-50"
+                  >
+                    {isSwitchingChain ? 'SWITCHING...' : 'SWITCH NETWORK'}
+                  </button>
+                  {switchChainError && (
+                    <p className="text-sm font-bold uppercase text-umbrella-red">{switchChainError}</p>
+                  )}
+                </div>
               )}
               <div className="mt-8 flex flex-col sm:flex-row gap-4">
                 <button
@@ -610,7 +722,12 @@ export default function App() {
             <div className="text-sm text-gold/70">Latest Block: <span className="text-gold font-bold">{latestBlock}</span></div>
             <div className="text-sm text-gold/70">Gas Price: <span className="text-gold font-bold">{gasPriceGwei} Gwei</span></div>
             <div className="text-sm text-gold/70">Explorer: <span className="text-gold font-bold">{KALEIDO_EXPLORER_URL || 'Not configured'}</span></div>
-            <div className="text-xs text-gold/40 break-all">{KALEIDO_RPC_URL || 'No Kaleido RPC configured'}</div>
+            <div className="text-xs text-gold/40 break-all">
+              {PUBLIC_KALEIDO_RPC_URL || 'No public Kaleido wallet RPC configured'}
+            </div>
+            {kaleidoError && (
+              <p className="text-xs text-umbrella-red break-words">{kaleidoError}</p>
+            )}
           </div>
         </section>
 
@@ -774,9 +891,22 @@ export default function App() {
                   </div>
 
                   {isWrongNetwork && (
-                    <p className="text-sm font-bold uppercase text-umbrella-red">
-                      Wrong network detected. Switch wallet to Kaleido chain {KALEIDO_CHAIN_ID} before submitting.
-                    </p>
+                    <div className="space-y-3">
+                      <p className="text-sm font-bold uppercase text-umbrella-red">
+                        Wrong network detected. Switch wallet to chain {TARGET_CHAIN_ID} before submitting.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleSwitchToTargetChain}
+                        disabled={isSwitchingChain || !isConnected}
+                        className="w-full glass-btn-secondary py-3 text-sm disabled:opacity-50"
+                      >
+                        {isSwitchingChain ? 'SWITCHING...' : 'SWITCH NETWORK'}
+                      </button>
+                      {switchChainError && (
+                        <p className="text-sm font-bold uppercase text-umbrella-red">{switchChainError}</p>
+                      )}
+                    </div>
                   )}
 
                   {tradeError && (

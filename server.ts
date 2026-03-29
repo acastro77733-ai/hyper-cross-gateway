@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { ethers } from "ethers";
 
 dotenv.config();
 
@@ -14,6 +15,57 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  app.get("/api/kaleido/telemetry", async (_req, res) => {
+    const rpcUrl = process.env.KALEIDO_RPC_URL;
+    if (!rpcUrl) {
+      return res.status(500).json({ error: "KALEIDO_RPC_URL is not configured" });
+    }
+
+    try {
+      const request = new ethers.FetchRequest(rpcUrl);
+      const basicUsername = process.env.KALEIDO_RPC_BASIC_USERNAME;
+      const basicPassword = process.env.KALEIDO_RPC_BASIC_PASSWORD;
+      const bearerToken = process.env.KALEIDO_RPC_BEARER_TOKEN;
+      const apiKeyHeaderName = process.env.KALEIDO_RPC_API_KEY_HEADER_NAME;
+      const apiKeyValue = process.env.KALEIDO_RPC_API_KEY;
+
+      if (basicUsername && basicPassword) {
+        const encoded = Buffer.from(`${basicUsername}:${basicPassword}`).toString("base64");
+        request.setHeader("Authorization", `Basic ${encoded}`);
+      } else if (bearerToken) {
+        request.setHeader("Authorization", `Bearer ${bearerToken}`);
+      }
+
+      if (apiKeyHeaderName && apiKeyValue) {
+        request.setHeader(apiKeyHeaderName, apiKeyValue);
+      }
+
+      const provider = new ethers.JsonRpcProvider(request);
+      const [network, blockNumber, feeData] = await Promise.all([
+        provider.getNetwork(),
+        provider.getBlockNumber(),
+        provider.getFeeData(),
+      ]);
+
+      return res.json({
+        chainId: network.chainId.toString(),
+        networkName: network.name || process.env.VITE_KALEIDO_CHAIN_NAME || "Kaleido EVM",
+        latestBlock: blockNumber,
+        gasPriceGwei: feeData.gasPrice ? Number(ethers.formatUnits(feeData.gasPrice, "gwei")) : null,
+      });
+    } catch (error: any) {
+      console.error("Kaleido telemetry API error:", error);
+      const rawMessage = String(error?.message || "Failed to reach Kaleido RPC");
+      if (rawMessage.includes("401") || rawMessage.toLowerCase().includes("unauthorized")) {
+        return res.status(502).json({
+          error: "Kaleido RPC unauthorized (401). Check KALEIDO_RPC_URL and any server-side auth env vars.",
+        });
+      }
+
+      return res.status(502).json({ error: rawMessage });
+    }
+  });
 
   // API Route for Magic Labs Identity Provider
   app.post("/api/magic/identity-provider", async (req, res) => {
